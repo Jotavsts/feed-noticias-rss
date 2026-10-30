@@ -1,0 +1,19 @@
+{
+  "name": "feed-noticias-rss",
+  "version": "1.0.0",
+  "description": "Feed de notícias em tempo real via RSS, com Node.js, Express e Docker.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "rss-parser": "^3.13.0"
+  },
+  "license": "MIT"
+}
