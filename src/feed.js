@@ -1,8 +1,8 @@
 const Parser = require("rss-parser");
 
+const USER_AGENT = "feed-noticias-rss/1.0 (+https://github.com/Jotavsts/feed-noticias-rss)";
+
 const parser = new Parser({
-  timeout: 10000,
-  headers: { "User-Agent": "feed-noticias-rss/1.0 (+https://github.com/Jotavsts/feed-noticias-rss)" },
   customFields: { item: [["atom:subtitle", "subtitulo"]] },
 });
 
@@ -43,8 +43,19 @@ function normalizarItem(item) {
   };
 }
 
+// Baixa o XML com fetch, que descomprime gzip sozinho (alguns servidores, como o do g1,
+// às vezes respondem comprimido mesmo sem o cliente pedir), e só então entrega ao parser.
+async function baixarFeed(url) {
+  const resposta = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!resposta.ok) throw new Error(`Feed respondeu com status ${resposta.status}`);
+  return resposta.text();
+}
+
 async function buscarNoticias(url) {
-  const feed = await parser.parseURL(url);
+  const feed = await parser.parseString(await baixarFeed(url));
   return {
     fonte: feed.title || url,
     noticias: (feed.items || []).map(normalizarItem).filter((n) => n.link),
