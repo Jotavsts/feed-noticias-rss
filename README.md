@@ -9,23 +9,27 @@ Aplicação web que lê um feed RSS (por padrão, o do g1) e mostra as notícias
 - Leitura e normalização de feed RSS (título, resumo, imagem, data e link da matéria original)
 - API REST `GET /api/noticias` com limite configurável
 - Cache em memória com tempo de expiração; se o feed cair, a última versão guardada continua sendo servida
+- Salvamento do último feed em um bucket Amazon S3, quando `S3_BUCKET` está definido
 - Interface responsiva, com filtro, botão de atualizar e suporte a tema claro/escuro
 - Execução com Docker ou direto com Node.js
 - Testes automatizados com `node:test`
 
 ## Tecnologias
 
-Node.js, Express, rss-parser, HTML, CSS, JavaScript, Docker e Docker Compose.
+Node.js, Express, rss-parser, AWS SDK (S3), HTML, CSS, JavaScript, Docker, Docker Compose e AWS EC2.
 
 ## Diagramas
 
 ### Visão geral
 
 ```mermaid
+---
+title: Visão geral
+---
 flowchart LR
-    U([Usuário]) -->|HTTP| F
+    U(["Usuários"]) -->|HTTP| F
 
-    subgraph AWS["AWS (opcional): instância EC2"]
+    subgraph AWS["AWS Cloud: instância EC2"]
         subgraph D["Contêiner Docker"]
             F["Frontend<br/>HTML, CSS e JS (public/)"]
             B["Backend Node.js e Express<br/>porta 3000"]
@@ -35,18 +39,22 @@ flowchart LR
             B <--> C
             B --> R
         end
+        S3[("Bucket S3<br/>último feed em JSON")]
+        B -->|"AWS SDK"| S3
     end
 
-    R -->|"HTTP/XML (rss-parser)"| G[("Feed RSS do g1")]
+    R -->|"HTTP/XML"| G[("Feed RSS do g1")]
 ```
 
-Variáveis de ambiente do backend: `PORT`, `FEED_URL` e `CACHE_TTL`.
+Variáveis de ambiente do backend: `PORT`, `FEED_URL`, `CACHE_TTL`, `S3_BUCKET` e `AWS_REGION`.
 
 | Componente | Descrição |
 | --- | --- |
+| Usuários | Quem acessa a página no navegador e filtra as notícias |
 | Frontend | Página estática servida pelo próprio Express, com filtro feito no navegador |
 | Backend | API Node.js/Express na porta 3000, com cache em memória |
 | `src/feed.js` | Busca o feed, limpa o HTML e devolve título, resumo, imagem, data e link |
+| Bucket S3 | Guarda o último feed lido em JSON (ativado pela variável `S3_BUCKET`) |
 | Feed RSS | Fonte externa das notícias (por padrão, o g1) |
 
 ### Fluxo de uma requisição
@@ -58,6 +66,7 @@ sequenceDiagram
     participant A as API (Express)
     participant C as Cache
     participant G as Feed RSS (g1)
+    participant S as Bucket S3
 
     U->>F: 1. Acessa a página
     F->>A: 2. GET /api/noticias
@@ -69,14 +78,16 @@ sequenceDiagram
         G-->>A: 5. Retorna o XML
         A->>A: 6. Normaliza os itens
         A->>C: 7. Guarda no cache
+        A-)S: 8. Salva o JSON (se S3_BUCKET estiver definido)
+        S--)A: 9. Confirma o salvamento
     end
-    A-->>F: 8. Retorna o JSON
-    F-->>U: 9. Exibe os cartões
-    U->>F: 10. Filtra por texto
-    F-->>U: 11. Atualiza a lista, sem chamar a API
+    A-->>F: 10. Retorna as notícias em JSON
+    F-->>U: 11. Exibe os cartões
+    U->>F: 12. Filtra por texto
+    F-->>U: 13. Atualiza a lista, sem chamar a API
 ```
 
-Se o feed estiver fora do ar e já existir uma versão guardada, a API devolve essa versão com `desatualizado: true`. Se não houver nada guardado, responde com erro 502.
+O salvamento no S3 não atrasa a resposta: a API responde ao frontend sem esperar a confirmação, e uma falha ali só é registrada no log. Se o feed estiver fora do ar e já existir uma versão guardada, a API devolve essa versão com `desatualizado: true`. Se não houver nada guardado, responde com erro 502.
 
 ## Como rodar
 
@@ -138,6 +149,34 @@ As variáveis são opcionais. Copie `.env.example` e ajuste, se quiser.
 | `PORT` | `3000` | Porta do servidor |
 | `FEED_URL` | `https://g1.globo.com/rss/g1/` | URL do feed RSS |
 | `CACHE_TTL` | `300` | Tempo de cache, em segundos |
+| `S3_BUCKET` | vazio | Nome do bucket S3 onde o último feed é salvo. Vazio desativa o recurso |
+| `AWS_REGION` | `sa-east-1` | Região do bucket |
+
+### Salvando o feed no S3
+
+Defina `S3_BUCKET` e o servidor grava o último feed lido em `noticias/ultimas.json`. As credenciais vêm da cadeia padrão da AWS, então **não coloque chaves de acesso no código nem no `.env`**. Na EC2, anexe à instância um perfil IAM com permissão apenas de escrita nesse bucket:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::NOME-DO-SEU-BUCKET/noticias/*"
+    }
+  ]
+}
+```
+
+Depois suba o contêiner passando as variáveis:
+
+```bash
+sudo docker run -d --name feed --restart unless-stopped -p 80:3000 \
+  -e S3_BUCKET=NOME-DO-SEU-BUCKET -e AWS_REGION=sa-east-1 feed-noticias-rss
+```
+
+Se o contêiner não conseguir as credenciais da instância, aumente o limite de saltos do serviço de metadados (`HttpPutResponseHopLimit`) para 2 nas opções da EC2.
 
 ## API
 
@@ -175,6 +214,7 @@ npm test
 .
 ├── public/            # interface (HTML, CSS e JavaScript)
 ├── src/feed.js        # leitura e normalização do RSS
+├── src/armazenamento.js  # salvamento do feed no S3
 ├── tests/             # testes automatizados
 ├── server.js          # servidor Express e API
 ├── Dockerfile
