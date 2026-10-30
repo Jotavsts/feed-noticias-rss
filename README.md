@@ -17,6 +17,67 @@ Aplicação web que lê um feed RSS (por padrão, o do g1) e mostra as notícias
 
 Node.js, Express, rss-parser, HTML, CSS, JavaScript, Docker e Docker Compose.
 
+## Diagramas
+
+### Visão geral
+
+```mermaid
+flowchart LR
+    U([Usuário]) -->|HTTP| F
+
+    subgraph AWS["AWS (opcional): instância EC2"]
+        subgraph D["Contêiner Docker"]
+            F["Frontend<br/>HTML, CSS e JS (public/)"]
+            B["Backend Node.js e Express<br/>porta 3000"]
+            C[("Cache em memória<br/>CACHE_TTL")]
+            R["src/feed.js<br/>lê e normaliza o RSS"]
+            F -->|"GET /api/noticias"| B
+            B <--> C
+            B --> R
+        end
+    end
+
+    R -->|"HTTP/XML (rss-parser)"| G[("Feed RSS do g1")]
+```
+
+Variáveis de ambiente do backend: `PORT`, `FEED_URL` e `CACHE_TTL`.
+
+| Componente | Descrição |
+| --- | --- |
+| Frontend | Página estática servida pelo próprio Express, com filtro feito no navegador |
+| Backend | API Node.js/Express na porta 3000, com cache em memória |
+| `src/feed.js` | Busca o feed, limpa o HTML e devolve título, resumo, imagem, data e link |
+| Feed RSS | Fonte externa das notícias (por padrão, o g1) |
+
+### Fluxo de uma requisição
+
+```mermaid
+sequenceDiagram
+    actor U as Usuário
+    participant F as Frontend
+    participant A as API (Express)
+    participant C as Cache
+    participant G as Feed RSS (g1)
+
+    U->>F: 1. Acessa a página
+    F->>A: 2. GET /api/noticias
+    A->>C: 3. Existe cache válido?
+    alt cache válido
+        C-->>A: 4. Devolve as notícias guardadas
+    else cache vazio ou expirado
+        A->>G: 4. Busca o feed RSS
+        G-->>A: 5. Retorna o XML
+        A->>A: 6. Normaliza os itens
+        A->>C: 7. Guarda no cache
+    end
+    A-->>F: 8. Retorna o JSON
+    F-->>U: 9. Exibe os cartões
+    U->>F: 10. Filtra por texto
+    F-->>U: 11. Atualiza a lista, sem chamar a API
+```
+
+Se o feed estiver fora do ar e já existir uma versão guardada, a API devolve essa versão com `desatualizado: true`. Se não houver nada guardado, responde com erro 502.
+
 ## Como rodar
 
 ### Opção 1: Node.js
