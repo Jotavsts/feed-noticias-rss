@@ -6,4 +6,6 @@ services:
     environment:
       FEED_URL: ${FEED_URL:-https://g1.globo.com/rss/g1/}
       CACHE_TTL: ${CACHE_TTL:-300}
+      S3_BUCKET: ${S3_BUCKET:-}
+      AWS_REGION: ${AWS_REGION:-sa-east-1}
     restart: unless-stopped

@@ -1,10 +1,12 @@
 const path = require("path");
 const express = require("express");
 const { buscarNoticias } = require("./src/feed");
+const { criarArmazenamento } = require("./src/armazenamento");
 
 const PORT = Number(process.env.PORT) || 3000;
 const FEED_URL = process.env.FEED_URL || "https://g1.globo.com/rss/g1/";
 const CACHE_TTL_MS = (Number(process.env.CACHE_TTL) || 300) * 1000;
+const armazenamento = criarArmazenamento({ bucket: process.env.S3_BUCKET });
 
 const app = express();
 app.disable("x-powered-by");
@@ -21,6 +23,12 @@ async function obterFeed() {
     const dados = await buscarNoticias(FEED_URL);
     cache.dados = dados;
     cache.expiraEm = Date.now() + CACHE_TTL_MS;
+
+    // Salva o snapshot no S3 sem esperar: uma falha aqui não pode derrubar a resposta.
+    armazenamento
+      .salvar({ ...dados, salvoEm: new Date().toISOString() })
+      .catch((erro) => console.error("Falha ao salvar no S3:", erro.message));
+
     return { ...dados, doCache: false };
   } catch (erro) {
     // Se o feed cair, devolve a última versão guardada em vez de quebrar a página.
@@ -48,4 +56,7 @@ app.get("/api/noticias", async (req, res) => {
 
 app.get("/saude", (req, res) => res.json({ status: "ok" }));
 
-app.listen(PORT, () => console.log(`Servidor rodando em http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+  if (armazenamento.ativo) console.log(`Salvando o último feed no bucket S3 "${process.env.S3_BUCKET}"`);
+});
