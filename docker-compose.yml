@@ -1,0 +1,9 @@
+services:
+  feed:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      FEED_URL: ${FEED_URL:-https://g1.globo.com/rss/g1/}
+      CACHE_TTL: ${CACHE_TTL:-300}
+    restart: unless-stopped
