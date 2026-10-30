@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feed de Notícias</title>
+  <meta name="description" content="Feed de notícias em tempo real via RSS.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo__conteudo">
+      <div>
+        <h1>Feed de Notícias</h1>
+        <p class="topo__fonte" id="fonte">Carregando…</p>
+      </div>
+      <div class="topo__acoes">
+        <input id="busca" type="search" placeholder="Filtrar notícias" aria-label="Filtrar notícias">
+        <button id="atualizar" type="button">Atualizar</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <section id="lista" class="grade" aria-label="Notícias"></section>
+  </main>
+
+  <footer class="rodape">
+    Os títulos e resumos pertencem aos respectivos veículos. Clique na notícia para ler a matéria completa na fonte.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
